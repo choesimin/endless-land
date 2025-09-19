@@ -29,9 +29,12 @@ This is a static HTML project with no build system:
 - Example: "Add game screen" not "Add initial Endless Land ASCII RPG setup with English UI and arrow controls"
 
 ## Game Components
-- **Map system**: 2D array representing game world with ASCII characters (`.` = empty, `#` = wall, `T` = tree)
-- **Player movement**: Collision detection and boundary checking
-- **UI elements**: Real-time position display, health/level info, and message system
+- **Map system**: Large scrolling maps (80x40) with viewport system (35x20)
+- **Multiple themed maps**: 7 interconnected maps with different themes (forest, plains, desert, mountains, village, cave, lake)
+- **Map transitions**: Wall gaps as exits, 3-wide openings connecting maps
+- **ASCII representation**: `.` = empty, `#` = wall, `T` = tree, `C` = cactus, `R` = rock, `H` = house, `S` = stalactite, `W` = water
+- **Camera system**: Player-centered viewport that scrolls with movement
+- **Object placement**: Theme-specific random object generation with collision avoidance
 
 ## Gameplay Design
 - **Controls**: Arrow keys for player movement (not WASD)

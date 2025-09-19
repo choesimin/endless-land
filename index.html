@@ -28,6 +28,9 @@
             white-space: pre;
             line-height: 1;
             font-size: 18px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0;
+            width: fit-content;
         }
 
         #gameInfo {
@@ -78,14 +81,51 @@
     <script>
         class SimpleRPG {
             constructor() {
-                this.mapWidth = 20;
-                this.mapHeight = 10;
-                this.playerX = 5;
-                this.playerY = 5;
+                // Game constants
+                this.CONSTANTS = {
+                    MAP_WIDTH: 80,
+                    MAP_HEIGHT: 40,
+                    VIEWPORT_WIDTH: 35,
+                    VIEWPORT_HEIGHT: 20,
+                    INITIAL_PLAYER_X: 10,
+                    INITIAL_PLAYER_Y: 10,
+                    EXIT_WIDTH: 3
+                };
 
-                // Map initialization (. = empty space, # = wall, T = tree)
-                this.map = [];
-                this.initializeMap();
+                // Map configurations
+                this.MAP_CONFIGS = {
+                    0: { theme: 'forest', exits: [{x: 39, y: 0, targetMap: 1, targetX: 39, targetY: 38}, {x: 79, y: 20, targetMap: 2, targetX: 1, targetY: 20}] },
+                    1: { theme: 'plains', exits: [{x: 39, y: 39, targetMap: 0, targetX: 39, targetY: 1}, {x: 20, y: 0, targetMap: 3, targetX: 20, targetY: 38}] },
+                    2: { theme: 'desert', exits: [{x: 0, y: 20, targetMap: 0, targetX: 78, targetY: 20}, {x: 39, y: 39, targetMap: 4, targetX: 39, targetY: 1}] },
+                    3: { theme: 'mountains', exits: [{x: 20, y: 39, targetMap: 1, targetX: 20, targetY: 1}, {x: 79, y: 15, targetMap: 5, targetX: 1, targetY: 15}] },
+                    4: { theme: 'village', exits: [{x: 39, y: 0, targetMap: 2, targetX: 39, targetY: 38}, {x: 0, y: 20, targetMap: 6, targetX: 78, targetY: 20}] },
+                    5: { theme: 'cave', exits: [{x: 0, y: 15, targetMap: 3, targetX: 78, targetY: 15}] },
+                    6: { theme: 'lake', exits: [{x: 79, y: 20, targetMap: 4, targetX: 1, targetY: 20}] }
+                };
+
+                // Theme object configurations
+                this.THEME_CONFIGS = {
+                    forest: { objects: [{ type: 'T', count: 30, probability: 1.0 }] },
+                    plains: { objects: [{ type: 'T', count: 8, probability: 1.0 }] },
+                    desert: { objects: [{ type: 'C', count: 15, probability: 0.7 }, { type: 'R', count: 15, probability: 0.3 }] },
+                    mountains: { objects: [{ type: 'R', count: 20, probability: 0.8 }, { type: 'T', count: 20, probability: 0.2 }] },
+                    village: { objects: [{ type: 'H', count: 12, probability: 1.0 }] },
+                    cave: { objects: [{ type: 'S', count: 25, probability: 0.6 }, { type: 'R', count: 25, probability: 0.4 }] },
+                    lake: { objects: [{ type: 'W', count: 18, probability: 0.5 }, { type: 'T', count: 18, probability: 0.5 }] }
+                };
+
+                // Game state
+                this.mapWidth = this.CONSTANTS.MAP_WIDTH;
+                this.mapHeight = this.CONSTANTS.MAP_HEIGHT;
+                this.viewportWidth = this.CONSTANTS.VIEWPORT_WIDTH;
+                this.viewportHeight = this.CONSTANTS.VIEWPORT_HEIGHT;
+                this.playerX = this.CONSTANTS.INITIAL_PLAYER_X;
+                this.playerY = this.CONSTANTS.INITIAL_PLAYER_Y;
+                this.currentMapId = 0;
+
+                // Initialize maps
+                this.maps = [];
+                this.initializeMaps();
 
                 // Register event listeners
                 document.addEventListener('keydown', (e) => this.handleKeyPress(e));
@@ -94,99 +134,195 @@
                 this.render();
             }
 
-            initializeMap() {
-                // Create empty map
+            // ===== MAP INITIALIZATION =====
+            initializeMaps() {
+                for (let mapId in this.MAP_CONFIGS) {
+                    this.maps[mapId] = this.createMap(this.MAP_CONFIGS[mapId]);
+                }
+            }
+
+            // ===== MAP GENERATION HELPERS =====
+            createEmptyMap() {
+                let map = [];
                 for (let y = 0; y < this.mapHeight; y++) {
-                    this.map[y] = [];
+                    map[y] = [];
                     for (let x = 0; x < this.mapWidth; x++) {
-                        this.map[y][x] = '.';
+                        map[y][x] = '.';
                     }
                 }
+                return map;
+            }
 
-                // Create boundary walls
+            createBoundaryWalls(map) {
+                // Horizontal walls
                 for (let x = 0; x < this.mapWidth; x++) {
-                    this.map[0][x] = '#';
-                    this.map[this.mapHeight - 1][x] = '#';
+                    map[0][x] = '#';
+                    map[this.mapHeight - 1][x] = '#';
                 }
+                // Vertical walls
                 for (let y = 0; y < this.mapHeight; y++) {
-                    this.map[y][0] = '#';
-                    this.map[y][this.mapWidth - 1] = '#';
+                    map[y][0] = '#';
+                    map[y][this.mapWidth - 1] = '#';
                 }
+            }
 
-                // Place random trees
-                for (let i = 0; i < 8; i++) {
+            createExits(map, exits) {
+                if (!exits) return;
+
+                exits.forEach(exit => {
+                    map[exit.y][exit.x] = '.';
+                    // Create exit width based on constant
+                    const halfWidth = Math.floor(this.CONSTANTS.EXIT_WIDTH / 2);
+                    for (let i = 1; i <= halfWidth; i++) {
+                        if (exit.x - i >= 0) map[exit.y][exit.x - i] = '.';
+                        if (exit.x + i < this.mapWidth) map[exit.y][exit.x + i] = '.';
+                    }
+                });
+            }
+
+            placeRandomObject(map, objectType, count, probability = 1.0) {
+                for (let i = 0; i < count; i++) {
+                    if (Math.random() > probability) continue;
+
                     let x = Math.floor(Math.random() * (this.mapWidth - 2)) + 1;
                     let y = Math.floor(Math.random() * (this.mapHeight - 2)) + 1;
-                    if (x !== this.playerX || y !== this.playerY) {
-                        this.map[y][x] = 'T';
+
+                    if (map[y][x] === '.') {
+                        map[y][x] = objectType;
                     }
                 }
             }
 
+            populateMapWithTheme(map, theme) {
+                const themeConfig = this.THEME_CONFIGS[theme];
+                if (!themeConfig) return;
+
+                themeConfig.objects.forEach(objConfig => {
+                    this.placeRandomObject(map, objConfig.type, objConfig.count, objConfig.probability);
+                });
+            }
+
+            createMap(config) {
+                const map = this.createEmptyMap();
+                this.createBoundaryWalls(map);
+                this.createExits(map, config.exits);
+                this.populateMapWithTheme(map, config.theme);
+
+                return { map, exits: config.exits || [] };
+            }
+
+            // ===== INPUT HANDLING =====
             handleKeyPress(event) {
-                let newX = this.playerX;
-                let newY = this.playerY;
+                const movement = this.getMovementFromKey(event.key);
+                if (!movement) return;
 
-                switch(event.key) {
-                    case 'ArrowUp':
-                        newY--;
-                        break;
-                    case 'ArrowLeft':
-                        newX--;
-                        break;
-                    case 'ArrowDown':
-                        newY++;
-                        break;
-                    case 'ArrowRight':
-                        newX++;
-                        break;
-                    default:
-                        return;
-                }
+                const newX = this.playerX + movement.dx;
+                const newY = this.playerY + movement.dy;
 
-                // Check if movement is possible
                 if (this.canMoveTo(newX, newY)) {
-                    this.playerX = newX;
-                    this.playerY = newY;
-                    this.updateMessage(`Player moved to (${this.playerX}, ${this.playerY}).`);
-                    this.render();
+                    this.movePlayer(newX, newY);
                 } else {
                     this.updateMessage("Cannot move in that direction!");
                 }
             }
 
-            canMoveTo(x, y) {
-                // Check map boundaries
-                if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
-                    return false;
-                }
-
-                // Check for walls or trees
-                if (this.map[y][x] === '#' || this.map[y][x] === 'T') {
-                    return false;
-                }
-
-                return true;
+            getMovementFromKey(key) {
+                const movements = {
+                    'ArrowUp': { dx: 0, dy: -1 },
+                    'ArrowLeft': { dx: -1, dy: 0 },
+                    'ArrowDown': { dx: 0, dy: 1 },
+                    'ArrowRight': { dx: 1, dy: 0 }
+                };
+                return movements[key];
             }
 
+            // ===== PLAYER MOVEMENT =====
+            movePlayer(newX, newY) {
+                this.playerX = newX;
+                this.playerY = newY;
+                this.checkMapTransition();
+                this.updateMessage(`Player moved to (${this.playerX}, ${this.playerY}).`);
+                this.render();
+            }
+
+            canMoveTo(x, y) {
+                if (!this.isWithinMapBounds(x, y)) return false;
+                return !this.isObstacle(x, y);
+            }
+
+            isWithinMapBounds(x, y) {
+                return x >= 0 && x < this.mapWidth && y >= 0 && y < this.mapHeight;
+            }
+
+            isObstacle(x, y) {
+                const currentMap = this.maps[this.currentMapId];
+                const cell = currentMap.map[y][x];
+                const obstacles = ['#', 'T', 'C', 'R', 'H', 'S', 'W'];
+                return obstacles.includes(cell);
+            }
+
+            // ===== MAP TRANSITIONS =====
+            checkMapTransition() {
+                const currentMap = this.maps[this.currentMapId];
+                if (!currentMap.exits) return;
+
+                currentMap.exits.forEach(exit => {
+                    if (this.isPlayerAtExit(exit)) {
+                        this.transitionToMap(exit.targetMap, exit.targetX, exit.targetY);
+                    }
+                });
+            }
+
+            isPlayerAtExit(exit) {
+                const tolerance = Math.floor(this.CONSTANTS.EXIT_WIDTH / 2);
+                return Math.abs(this.playerX - exit.x) <= tolerance && this.playerY === exit.y;
+            }
+
+            transitionToMap(mapId, x, y) {
+                this.currentMapId = mapId;
+                this.playerX = x;
+                this.playerY = y;
+                this.updateMessage(`Entered new area!`);
+            }
+
+            // ===== RENDERING =====
             render() {
+                const currentMap = this.maps[this.currentMapId];
+                const viewport = this.calculateViewport();
+                const mapDisplay = this.generateMapDisplay(currentMap, viewport);
+
+                document.getElementById('gameMap').textContent = mapDisplay;
+                document.getElementById('playerPos').textContent = `${this.playerX},${this.playerY} (Map ${this.currentMapId})`;
+            }
+
+            calculateViewport() {
+                let viewX = this.playerX - Math.floor(this.viewportWidth / 2);
+                let viewY = this.playerY - Math.floor(this.viewportHeight / 2);
+
+                viewX = Math.max(0, Math.min(viewX, this.mapWidth - this.viewportWidth));
+                viewY = Math.max(0, Math.min(viewY, this.mapHeight - this.viewportHeight));
+
+                return { viewX, viewY };
+            }
+
+            generateMapDisplay(currentMap, viewport) {
                 let mapDisplay = '';
 
-                for (let y = 0; y < this.mapHeight; y++) {
-                    for (let x = 0; x < this.mapWidth; x++) {
+                for (let y = viewport.viewY; y < viewport.viewY + this.viewportHeight; y++) {
+                    for (let x = viewport.viewX; x < viewport.viewX + this.viewportWidth; x++) {
                         if (x === this.playerX && y === this.playerY) {
-                            mapDisplay += '@';  // Player
+                            mapDisplay += '@';
                         } else {
-                            mapDisplay += this.map[y][x];
+                            mapDisplay += currentMap.map[y][x];
                         }
                     }
                     mapDisplay += '\n';
                 }
 
-                document.getElementById('gameMap').textContent = mapDisplay;
-                document.getElementById('playerPos').textContent = `${this.playerX},${this.playerY}`;
+                return mapDisplay;
             }
 
+            // ===== UI UPDATES =====
             updateMessage(message) {
                 document.getElementById('messages').innerHTML = `<strong>Message:</strong> ${message}`;
             }
