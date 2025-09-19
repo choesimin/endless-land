@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Land</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #000;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+        }
+
+        #gameContainer {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        #gameMap {
+            background-color: #000;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            padding: 10px;
+            margin: 20px 0;
+            white-space: pre;
+            line-height: 1;
+            font-size: 18px;
+        }
+
+        #gameInfo {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .info-panel {
+            background-color: #001100;
+            border: 1px solid #00ff00;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>Endless Land</h1>
+
+        <div id="gameInfo">
+            <div class="info-panel">
+                <strong>Player:</strong> @<br>
+                <strong>Position:</strong> <span id="playerPos">5,5</span>
+            </div>
+            <div class="info-panel">
+                <strong>Health:</strong> 100/100<br>
+                <strong>Level:</strong> 1
+            </div>
+        </div>
+
+        <div id="gameMap"></div>
+
+        <div id="controls" class="info-panel">
+            <strong>Controls:</strong> Use arrow keys to move
+        </div>
+
+        <div id="messages" class="info-panel">
+            <strong>Message:</strong> Game started!
+        </div>
+    </div>
+
+    <script>
+        class SimpleRPG {
+            constructor() {
+                this.mapWidth = 20;
+                this.mapHeight = 10;
+                this.playerX = 5;
+                this.playerY = 5;
+
+                // Map initialization (. = empty space, # = wall, T = tree)
+                this.map = [];
+                this.initializeMap();
+
+                // Register event listeners
+                document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+
+                // Initial rendering
+                this.render();
+            }
+
+            initializeMap() {
+                // Create empty map
+                for (let y = 0; y < this.mapHeight; y++) {
+                    this.map[y] = [];
+                    for (let x = 0; x < this.mapWidth; x++) {
+                        this.map[y][x] = '.';
+                    }
+                }
+
+                // Create boundary walls
+                for (let x = 0; x < this.mapWidth; x++) {
+                    this.map[0][x] = '#';
+                    this.map[this.mapHeight - 1][x] = '#';
+                }
+                for (let y = 0; y < this.mapHeight; y++) {
+                    this.map[y][0] = '#';
+                    this.map[y][this.mapWidth - 1] = '#';
+                }
+
+                // Place random trees
+                for (let i = 0; i < 8; i++) {
+                    let x = Math.floor(Math.random() * (this.mapWidth - 2)) + 1;
+                    let y = Math.floor(Math.random() * (this.mapHeight - 2)) + 1;
+                    if (x !== this.playerX || y !== this.playerY) {
+                        this.map[y][x] = 'T';
+                    }
+                }
+            }
+
+            handleKeyPress(event) {
+                let newX = this.playerX;
+                let newY = this.playerY;
+
+                switch(event.key) {
+                    case 'ArrowUp':
+                        newY--;
+                        break;
+                    case 'ArrowLeft':
+                        newX--;
+                        break;
+                    case 'ArrowDown':
+                        newY++;
+                        break;
+                    case 'ArrowRight':
+                        newX++;
+                        break;
+                    default:
+                        return;
+                }
+
+                // Check if movement is possible
+                if (this.canMoveTo(newX, newY)) {
+                    this.playerX = newX;
+                    this.playerY = newY;
+                    this.updateMessage(`Player moved to (${this.playerX}, ${this.playerY}).`);
+                    this.render();
+                } else {
+                    this.updateMessage("Cannot move in that direction!");
+                }
+            }
+
+            canMoveTo(x, y) {
+                // Check map boundaries
+                if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
+                    return false;
+                }
+
+                // Check for walls or trees
+                if (this.map[y][x] === '#' || this.map[y][x] === 'T') {
+                    return false;
+                }
+
+                return true;
+            }
+
+            render() {
+                let mapDisplay = '';
+
+                for (let y = 0; y < this.mapHeight; y++) {
+                    for (let x = 0; x < this.mapWidth; x++) {
+                        if (x === this.playerX && y === this.playerY) {
+                            mapDisplay += '@';  // Player
+                        } else {
+                            mapDisplay += this.map[y][x];
+                        }
+                    }
+                    mapDisplay += '\n';
+                }
+
+                document.getElementById('gameMap').textContent = mapDisplay;
+                document.getElementById('playerPos').textContent = `${this.playerX},${this.playerY}`;
+            }
+
+            updateMessage(message) {
+                document.getElementById('messages').innerHTML = `<strong>Message:</strong> ${message}`;
+            }
+        }
+
+        // Start game
+        const game = new SimpleRPG();
+    </script>
+</body>
+</html>
