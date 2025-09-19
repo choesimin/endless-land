@@ -17,6 +17,12 @@ This is a static HTML project with no build system:
 - **Run locally**: Open `index.html` in a web browser
 - **No build step required**: Direct file editing and browser refresh
 
+## Language Usage Rules
+- **Conversations**: Use Korean only when discussing with the user
+- **Code and Documentation**: Use English only for all source code, comments, documentation files, commit messages, and technical content
+- **CLAUDE.md file**: Always write in English
+- **System prompts**: Write in English for AI agent compatibility
+
 ## Code Style Preferences
 - Do not use emojis in code, documentation, or any file modifications
 - Keep all text content emoji-free for this project
