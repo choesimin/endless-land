@@ -274,8 +274,7 @@
             }
 
             isPlayerAtExit(exit) {
-                const tolerance = Math.floor(this.CONSTANTS.EXIT_WIDTH / 2);
-                return Math.abs(this.playerX - exit.x) <= tolerance && this.playerY === exit.y;
+                return this.playerX === exit.x && this.playerY === exit.y;
             }
 
             transitionToMap(mapId, x, y) {
