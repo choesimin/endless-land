@@ -70,7 +70,7 @@
         <div id="gameMap"></div>
 
         <div id="controls" class="info-panel">
-            <strong>Controls:</strong> Use arrow keys to move, M for map mode
+            <strong>Controls:</strong> Use WASD to move, M for map mode
         </div>
 
         <div id="messages" class="info-panel">
@@ -246,10 +246,14 @@
 
             getMovementFromKey(key) {
                 const movements = {
-                    'ArrowUp': { dx: 0, dy: -1 },
-                    'ArrowLeft': { dx: -1, dy: 0 },
-                    'ArrowDown': { dx: 0, dy: 1 },
-                    'ArrowRight': { dx: 1, dy: 0 }
+                    'w': { dx: 0, dy: -1 },
+                    'W': { dx: 0, dy: -1 },
+                    'a': { dx: -1, dy: 0 },
+                    'A': { dx: -1, dy: 0 },
+                    's': { dx: 0, dy: 1 },
+                    'S': { dx: 0, dy: 1 },
+                    'd': { dx: 1, dy: 0 },
+                    'D': { dx: 1, dy: 0 }
                 };
                 return movements[key];
             }
@@ -310,7 +314,7 @@
                     this.mapModeCurrentMap = this.currentMapId;
                     this.mapModeViewX = this.playerX - Math.floor(this.viewportWidth / 2);
                     this.mapModeViewY = this.playerY - Math.floor(this.viewportHeight / 2);
-                    this.updateMessage("Map mode enabled. Use arrows to navigate, M to exit.");
+                    this.updateMessage("Map mode enabled. Use WASD to navigate, M to exit.");
                 } else {
                     this.updateMessage("Map mode disabled.");
                 }

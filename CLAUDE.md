@@ -76,11 +76,19 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 ### Map Mode System
 - **Toggle**: M key switches between game mode and map mode
 - **Exploration tracking**: Only visited areas (within viewport range) are revealed
-- **Camera movement**: Arrow keys move camera view within and between maps
+- **Camera movement**: WASD keys move camera view within and between maps
 - **Seamless navigation**: Camera automatically transitions to connected maps at boundaries
 - **Split view**: Left side shows map view, right side shows connection diagram
 - **Map indicators**: `>` (current viewing), `@` (player location), `(?)` (unvisited)
 - **Exit detection**: Map transitions require exact coordinate positioning for player movement
+
+### Control Scheme
+- **Movement**: WASD keys for all directional movement (both game mode and map mode)
+- **Map toggle**: M key switches between game mode and map mode
+- **Map navigation**: Number keys (0-6) for direct map selection in map mode
+- **Browser compatibility**: No arrow keys, space bar, or tab to avoid browser conflicts
+- **Case insensitive**: Both uppercase and lowercase keys supported
+- **Reserved for future**: Enter key available for additional functionality
 
 ### ASCII Character Rules
 - **Reserved characters**: `.` (empty), `#` (wall), `@` (player)
