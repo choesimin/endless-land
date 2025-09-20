@@ -70,7 +70,7 @@
         <div id="gameMap"></div>
 
         <div id="controls" class="info-panel">
-            <strong>Controls:</strong> Use arrow keys to move
+            <strong>Controls:</strong> Use arrow keys to move, M for map mode
         </div>
 
         <div id="messages" class="info-panel">
@@ -122,6 +122,13 @@
                 this.playerX = this.CONSTANTS.INITIAL_PLAYER_X;
                 this.playerY = this.CONSTANTS.INITIAL_PLAYER_Y;
                 this.currentMapId = 0;
+                
+                // Map mode state
+                this.isMapMode = false;
+                this.mapModeCurrentMap = 0;
+                this.mapModeViewX = 0;
+                this.mapModeViewY = 0;
+                this.visitedAreas = {};
 
                 // Initialize maps
                 this.maps = [];
@@ -130,7 +137,8 @@
                 // Register event listeners
                 document.addEventListener('keydown', (e) => this.handleKeyPress(e));
 
-                // Initial rendering
+                // Initial area recording and rendering
+                this.recordVisitedArea();
                 this.render();
             }
 
@@ -213,6 +221,16 @@
 
             // ===== INPUT HANDLING =====
             handleKeyPress(event) {
+                if (event.key === 'm' || event.key === 'M') {
+                    this.toggleMapMode();
+                    return;
+                }
+
+                if (this.isMapMode) {
+                    this.handleMapModeInput(event);
+                    return;
+                }
+
                 const movement = this.getMovementFromKey(event.key);
                 if (!movement) return;
 
@@ -240,6 +258,7 @@
             movePlayer(newX, newY) {
                 this.playerX = newX;
                 this.playerY = newY;
+                this.recordVisitedArea();
                 this.checkMapTransition();
                 this.updateMessage(`Player moved to (${this.playerX}, ${this.playerY}).`);
                 this.render();
@@ -284,14 +303,210 @@
                 this.updateMessage(`Entered new area!`);
             }
 
+            // ===== MAP MODE =====
+            toggleMapMode() {
+                this.isMapMode = !this.isMapMode;
+                if (this.isMapMode) {
+                    this.mapModeCurrentMap = this.currentMapId;
+                    this.mapModeViewX = this.playerX - Math.floor(this.viewportWidth / 2);
+                    this.mapModeViewY = this.playerY - Math.floor(this.viewportHeight / 2);
+                    this.updateMessage("Map mode enabled. Use arrows to navigate, M to exit.");
+                } else {
+                    this.updateMessage("Map mode disabled.");
+                }
+                this.render();
+            }
+
+            handleMapModeInput(event) {
+                const movement = this.getMovementFromKey(event.key);
+                if (movement) {
+                    this.moveMapModeCamera(movement.dx, movement.dy);
+                    return;
+                }
+
+                // Switch between maps with number keys
+                const mapKey = parseInt(event.key);
+                if (!isNaN(mapKey) && mapKey >= 0 && mapKey < Object.keys(this.MAP_CONFIGS).length) {
+                    this.mapModeCurrentMap = mapKey;
+                    this.mapModeViewX = 0;
+                    this.mapModeViewY = 0;
+                    this.updateMessage(`Viewing Map ${mapKey}`);
+                    this.render();
+                }
+            }
+
+            moveMapModeCamera(dx, dy) {
+                const newViewX = this.mapModeViewX + dx;
+                const newViewY = this.mapModeViewY + dy;
+
+                // Check if we need to transition to another map
+                const transition = this.checkMapModeTransition(newViewX, newViewY);
+                if (transition) {
+                    this.mapModeCurrentMap = transition.targetMap;
+                    this.mapModeViewX = transition.newViewX;
+                    this.mapModeViewY = transition.newViewY;
+                    this.updateMessage(`Moved to Map ${this.mapModeCurrentMap}`);
+                } else {
+                    // Normal camera movement within current map
+                    this.mapModeViewX = Math.max(0, Math.min(newViewX, this.mapWidth - this.viewportWidth));
+                    this.mapModeViewY = Math.max(0, Math.min(newViewY, this.mapHeight - this.viewportHeight));
+                }
+                this.render();
+            }
+
+            checkMapModeTransition(viewX, viewY) {
+                const currentMapConfig = this.MAP_CONFIGS[this.mapModeCurrentMap];
+                if (!currentMapConfig.exits) return null;
+
+                // Check if camera is trying to go beyond map boundaries
+                for (const exit of currentMapConfig.exits) {
+                    // Check for transitions based on camera position and exit locations
+                    if (this.isViewportAtExit(viewX, viewY, exit)) {
+                        return {
+                            targetMap: exit.targetMap,
+                            newViewX: this.calculateTransitionViewX(exit),
+                            newViewY: this.calculateTransitionViewY(exit)
+                        };
+                    }
+                }
+                return null;
+            }
+
+            isViewportAtExit(viewX, viewY, exit) {
+                const viewportCenterX = viewX + Math.floor(this.viewportWidth / 2);
+                const viewportCenterY = viewY + Math.floor(this.viewportHeight / 2);
+                
+                // Check if viewport center is near an exit
+                const tolerance = 5;
+                return Math.abs(viewportCenterX - exit.x) <= tolerance && 
+                       Math.abs(viewportCenterY - exit.y) <= tolerance;
+            }
+
+            calculateTransitionViewX(exit) {
+                // Position camera near the corresponding entrance in the target map
+                return Math.max(0, Math.min(exit.targetX - Math.floor(this.viewportWidth / 2), 
+                                           this.mapWidth - this.viewportWidth));
+            }
+
+            calculateTransitionViewY(exit) {
+                return Math.max(0, Math.min(exit.targetY - Math.floor(this.viewportHeight / 2), 
+                                           this.mapHeight - this.viewportHeight));
+            }
+
+            recordVisitedArea() {
+                if (!this.visitedAreas[this.currentMapId]) {
+                    this.visitedAreas[this.currentMapId] = new Set();
+                }
+                
+                const viewport = this.calculateViewport();
+                for (let y = viewport.viewY; y < viewport.viewY + this.viewportHeight; y++) {
+                    for (let x = viewport.viewX; x < viewport.viewX + this.viewportWidth; x++) {
+                        this.visitedAreas[this.currentMapId].add(`${x},${y}`);
+                    }
+                }
+            }
+
             // ===== RENDERING =====
             render() {
+                if (this.isMapMode) {
+                    this.renderMapMode();
+                } else {
+                    this.renderGameMode();
+                }
+            }
+
+            renderGameMode() {
                 const currentMap = this.maps[this.currentMapId];
                 const viewport = this.calculateViewport();
                 const mapDisplay = this.generateMapDisplay(currentMap, viewport);
 
                 document.getElementById('gameMap').textContent = mapDisplay;
                 document.getElementById('playerPos').textContent = `${this.playerX},${this.playerY} (Map ${this.currentMapId})`;
+            }
+
+            renderMapMode() {
+                const mapDisplay = this.generateMapModeDisplay();
+                const connectionDiagram = this.generateConnectionDiagram();
+                
+                // Split display into map view (left) and connection diagram (right)
+                const combinedDisplay = this.combineMapAndDiagram(mapDisplay, connectionDiagram);
+                
+                document.getElementById('gameMap').textContent = combinedDisplay;
+                document.getElementById('playerPos').textContent = `Map Mode - Viewing Map ${this.mapModeCurrentMap} (${this.mapModeViewX},${this.mapModeViewY})`;
+            }
+
+            generateMapModeDisplay() {
+                const currentMap = this.maps[this.mapModeCurrentMap];
+                const visitedSet = this.visitedAreas[this.mapModeCurrentMap] || new Set();
+                let mapDisplay = '';
+
+                for (let y = this.mapModeViewY; y < this.mapModeViewY + this.viewportHeight; y++) {
+                    for (let x = this.mapModeViewX; x < this.mapModeViewX + this.viewportWidth; x++) {
+                        if (x < 0 || x >= this.mapWidth || y < 0 || y >= this.mapHeight) {
+                            mapDisplay += ' ';
+                        } else if (this.currentMapId === this.mapModeCurrentMap && x === this.playerX && y === this.playerY) {
+                            mapDisplay += '@';
+                        } else if (visitedSet.has(`${x},${y}`)) {
+                            mapDisplay += currentMap.map[y][x];
+                        } else {
+                            mapDisplay += '?';
+                        }
+                    }
+                    mapDisplay += '\n';
+                }
+
+                return mapDisplay.slice(0, -1); // Remove last newline
+            }
+
+            generateConnectionDiagram() {
+                const mapNames = ['Forest', 'Plains', 'Desert', 'Mountains', 'Village', 'Cave', 'Lake'];
+                let diagram = '';
+                
+                diagram += 'Map Connections:\n';
+                diagram += '================\n';
+                
+                for (let mapId = 0; mapId < Object.keys(this.MAP_CONFIGS).length; mapId++) {
+                    const isCurrentMap = mapId === this.mapModeCurrentMap;
+                    const isPlayerMap = mapId === this.currentMapId;
+                    const hasVisited = this.visitedAreas[mapId] && this.visitedAreas[mapId].size > 0;
+                    
+                    let prefix = '  ';
+                    if (isCurrentMap) prefix = '> ';
+                    else if (isPlayerMap) prefix = '@ ';
+                    
+                    diagram += `${prefix}${mapId}: ${mapNames[mapId]}`;
+                    if (!hasVisited) diagram += ' (?)';
+                    diagram += '\n';
+                    
+                    // Show connections
+                    const config = this.MAP_CONFIGS[mapId];
+                    if (config.exits) {
+                        config.exits.forEach(exit => {
+                            diagram += `    -> ${exit.targetMap}: ${mapNames[exit.targetMap]}\n`;
+                        });
+                    }
+                    diagram += '\n';
+                }
+                
+                return diagram;
+            }
+
+            combineMapAndDiagram(mapDisplay, diagram) {
+                const mapLines = mapDisplay.split('\n');
+                const diagramLines = diagram.split('\n');
+                const maxLines = Math.max(mapLines.length, diagramLines.length);
+                
+                let combined = '';
+                for (let i = 0; i < maxLines; i++) {
+                    const mapLine = mapLines[i] || '';
+                    const diagramLine = diagramLines[i] || '';
+                    
+                    // Pad map line to consistent width, add spacing, then diagram
+                    const paddedMapLine = mapLine.padEnd(this.viewportWidth);
+                    combined += paddedMapLine + '   ' + diagramLine + '\n';
+                }
+                
+                return combined.slice(0, -1); // Remove last newline
             }
 
             calculateViewport() {

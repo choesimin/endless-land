@@ -60,6 +60,7 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 - **===== INPUT HANDLING =====**: Keyboard input processing
 - **===== PLAYER MOVEMENT =====**: Movement validation and execution
 - **===== MAP TRANSITIONS =====**: Inter-map travel system
+- **===== MAP MODE =====**: Map viewing and navigation system
 - **===== RENDERING =====**: Viewport calculation and display
 - **===== UI UPDATES =====**: User interface management
 
@@ -71,6 +72,15 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 - **Multiple maps**: 7+ interconnected themed areas
 - **Transitions**: 3-wide wall gaps connecting maps at specific coordinates
 - **Themes**: forest, plains, desert, mountains, village, cave, lake (expandable)
+
+### Map Mode System
+- **Toggle**: M key switches between game mode and map mode
+- **Exploration tracking**: Only visited areas (within viewport range) are revealed
+- **Camera movement**: Arrow keys move camera view within and between maps
+- **Seamless navigation**: Camera automatically transitions to connected maps at boundaries
+- **Split view**: Left side shows map view, right side shows connection diagram
+- **Map indicators**: `>` (current viewing), `@` (player location), `(?)` (unvisited)
+- **Exit detection**: Map transitions require exact coordinate positioning for player movement
 
 ### ASCII Character Rules
 - **Reserved characters**: `.` (empty), `#` (wall), `@` (player)
@@ -111,3 +121,17 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 1. Choose unused alphabet letter (A-Z)
 2. Add to collision detection in isObstacle() function
 3. Update documentation with object meaning
+
+## Map Mode Implementation Notes
+
+### Key Design Decisions
+- **Exploration-based revelation**: Players must physically visit areas to see them in map mode
+- **Camera-based navigation**: Map mode uses independent camera movement separate from player position
+- **Exit coordinate precision**: Player movement requires exact exit coordinates, but map mode camera uses proximity detection
+- **Visual feedback**: Connection diagram provides context for current viewing position and overall world structure
+
+### Technical Considerations
+- **Visited area storage**: Uses Set data structure with coordinate strings for efficient lookup
+- **Map transition detection**: Different tolerance levels for player movement vs camera movement
+- **Viewport consistency**: Map mode camera uses same viewport dimensions as game mode
+- **State management**: Separate tracking for map mode current map vs actual player map location
