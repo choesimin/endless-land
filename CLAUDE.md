@@ -91,9 +91,12 @@ endless-land/
 - Comments can be in English for clarity
 
 ## Commit Message Style
-- Use simple one-line commit messages without periods
-- Keep messages concise and abstract
-- Example: "Add game screen" not "Add initial Endless Land ASCII RPG setup with English UI and arrow controls"
+- **MANDATORY**: Use ONLY one-line commit messages without periods
+- **NO multi-line messages**: Never use multiple lines or additional descriptions
+- **NO periods**: Never end commit messages with periods
+- **Concise and abstract**: Keep messages short and high-level
+- **Example**: "Add game screen" not "Add initial Endless Land ASCII RPG setup with English UI and arrow controls"
+- **Example**: "Restructure project with independent stacks" not detailed explanations
 
 ## Code Structure (Post-Refactoring)
 The main `SimpleRPG` class is organized into clearly marked sections:
