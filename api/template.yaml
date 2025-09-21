@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Endless Land - Full Stack AI-powered RPG Game
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: endless-land
+    Description: Project name for resource naming
+  
+  FrontendBucketName:
+    Type: String
+    Default: endless-land-frontend
+    Description: S3 bucket name for frontend hosting
+  
+  ApiStage:
+    Type: String
+    Default: prod
+    Description: API Gateway stage name
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        MAPS_TABLE: !Ref MapsTable
+        SESSIONS_TABLE: !Ref GameSessionsTable
+
+Resources:
+  # S3 Bucket for Frontend Hosting
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref FrontendBucketName
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket}/*'
+
+  # DynamoDB Tables
+  MapsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-maps'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: mapId
+          AttributeType: S
+        - AttributeName: version
+          AttributeType: S
+      KeySchema:
+        - AttributeName: mapId
+          KeyType: HASH
+        - AttributeName: version
+          KeyType: RANGE
+
+  GameSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-sessions'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # REST API Lambda Functions
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-api'
+      CodeUri: ./
+      Handler: index.restHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MapsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameSessionsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        GenerateMap:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /maps/generate
+            Method: POST
+        GetMap:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /maps/{mapId}
+            Method: GET
+        SaveMap:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /maps/{mapId}
+            Method: POST
+        GetSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /sessions/{sessionId}
+            Method: GET
+        UpdateSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /sessions/{sessionId}
+            Method: PUT
+
+  # WebSocket Lambda Function
+  WebSocketFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-websocket'
+      CodeUri: ./
+      Handler: index.websocketHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MapsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GameSessionsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+
+  # REST API Gateway
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub '${ProjectName}-api'
+      StageName: !Ref ApiStage
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+
+  # WebSocket API Gateway
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${ProjectName}-websocket'
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: '$request.body.action'
+
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: !Ref ApiStage
+      AutoDeploy: true
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      Target: !Sub 'integrations/${ConnectIntegration}'
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      Target: !Sub 'integrations/${DisconnectIntegration}'
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $default
+      Target: !Sub 'integrations/${DefaultIntegration}'
+
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketFunction.Arn}/invocations'
+
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketFunction.Arn}/invocations'
+
+  DefaultIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketFunction.Arn}/invocations'
+
+  # Lambda Permissions for WebSocket
+  ConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WebSocketFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
+
+Outputs:
+  RestApiEndpoint:
+    Description: REST API Gateway endpoint URL
+    Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStage}'
+    Export:
+      Name: !Sub '${AWS::StackName}-RestApiEndpoint'
+
+  WebSocketEndpoint:
+    Description: WebSocket API Gateway endpoint URL
+    Value: !Sub 'wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStage}'
+    Export:
+      Name: !Sub '${AWS::StackName}-WebSocketEndpoint'
+
+  FrontendURL:
+    Description: Frontend S3 website URL
+    Value: !Sub 'http://${FrontendBucket}.s3-website.${AWS::Region}.amazonaws.com'
+    Export:
+      Name: !Sub '${AWS::StackName}-FrontendURL'
+
+  MapsTableName:
+    Description: DynamoDB Maps table name
+    Value: !Ref MapsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-MapsTable'
+
+  SessionsTableName:
+    Description: DynamoDB Sessions table name
+    Value: !Ref GameSessionsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-SessionsTable'

@@ -8,26 +8,75 @@ Endless Land is an AI-powered RPG game featuring multiple interconnected themed 
 ## Project Structure
 ```
 endless-land/
-├── index.html              # Main game file (HTML/CSS/JavaScript)
+├── web/
+│   ├── index.html          # Main game frontend (HTML/CSS/JavaScript)
+│   └── deploy.sh           # Frontend deployment script
+├── api/                    # Backend API (Node.js/TypeScript)
+│   ├── index.ts            # Lambda handlers (REST + WebSocket)
+│   ├── bedrock.ts          # AI map generation using Bedrock
+│   ├── types/              # All TypeScript types
+│   │   ├── game.ts         # Game-related types
+│   │   ├── api.ts          # API request/response types
+│   │   ├── lambda.ts       # Lambda and backend-specific types
+│   │   └── index.ts        # Type exports
+│   ├── package.json        # Node.js dependencies
+│   ├── package-lock.json   # Dependency lock file
+│   ├── tsconfig.json       # TypeScript configuration
+│   ├── template.yaml       # SAM CloudFormation template
+│   ├── samconfig.toml      # SAM deployment configuration
+│   └── deploy.sh           # Deployment script
+├── .env.example            # Environment variables template
+├── .env                    # Environment configuration (gitignored)
 ├── CLAUDE.md               # Development documentation
 ├── README.md               # Project description
 ├── LICENSE                 # Project license
-└── prompts/
-    └── world-generator.md  # AI system prompt for world generation
+└── docs/
+    └── prompts/
+        └── world-generator.md  # AI system prompt for world generation
 ```
 
 ## Architecture
-- **Single-file game**: All game logic, styling, and HTML in `index.html`
+
+### Frontend Architecture
+- **Single-file game**: All game logic, styling, and HTML in `web/index.html`
 - **Configuration-driven**: Maps and themes defined in data structures
 - **Modular functions**: Code organized into logical sections with single responsibilities
 - **Scrolling viewport**: 35x20 visible area within 80x40 maps
 - **Multi-map system**: 7+ interconnected themed areas with transition system
-- **AI integration**: System prompts for procedural content generation
+- **AI integration**: Real-time AI generation via backend APIs
+
+### Backend Architecture (AWS SAM)
+- **Serverless**: Lambda functions for compute, API Gateway for endpoints
+- **Database**: DynamoDB for persistent map and session storage
+- **AI Integration**: Amazon Bedrock (Claude 3.5 Sonnet) for map generation
+- **Static Hosting**: S3 for frontend deployment
+- **Infrastructure as Code**: CloudFormation via SAM template
+- **TypeScript**: Type-safe backend with comprehensive type definitions
 
 ## Development Commands
-This is a static HTML project with no build system:
-- **Run locally**: Open `index.html` in a web browser
+
+### Frontend Development
+- **Run locally**: Open `web/index.html` in a web browser
 - **No build step required**: Direct file editing and browser refresh
+- **Deploy to S3**: `cd web && ./deploy.sh` (deploys to S3 static website)
+
+### Backend Development
+- **Install dependencies**: `cd api && npm install`
+- **Build TypeScript**: `cd api && npm run build` (compiles TypeScript to dist/)
+- **Type checking**: TypeScript compilation validates all types
+
+### Full Stack Deployment
+- **Setup environment**: Copy `.env.example` to `.env` and configure (shared by both deployments)
+- **Backend deployment**: `cd api && ./deploy.sh` (SAM build + deployment)
+- **Frontend deployment**: `cd web && ./deploy.sh` (S3 upload + endpoint auto-detection)
+- **Manual deployment**: `cd api && sam build && sam deploy` then `cd web && ./deploy.sh`
+
+### Environment Configuration
+- **Shared configuration**: Single `.env` file at project root
+- **Used by**: Both `api/deploy.sh` and `web/deploy.sh` scripts
+- **Key settings**: AWS region, project name, bucket names, API stage
+- **Path handling**: Deploy scripts automatically reference `../.env`
+- **Optional**: Most settings have sensible defaults
 
 ## Language Usage Rules
 - **Conversations**: Use Korean only when discussing with the user
@@ -85,6 +134,7 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 ### Control Scheme
 - **Movement**: WASD keys for all directional movement (both game mode and map mode)
 - **Map toggle**: M key switches between game mode and map mode
+- **AI map generation**: G key generates new AI map using Bedrock
 - **Map navigation**: Number keys (0-6) for direct map selection in map mode
 - **Browser compatibility**: No arrow keys, space bar, or tab to avoid browser conflicts
 - **Case insensitive**: Both uppercase and lowercase keys supported
@@ -99,26 +149,65 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 - `T` = Tree, `C` = Cactus, `R` = Rock, `H` = House, `S` = Stalactite, `W` = Water
 - **Expandable**: AI can create new objects using unused alphabet letters
 
+## Cloud Architecture
+
+### AWS SAM Stack
+- **Frontend**: S3 Static Website hosting (`web/index.html`)
+- **API**: API Gateway (REST + WebSocket)
+- **Compute**: Lambda Functions (TypeScript)
+- **Database**: DynamoDB (Maps + GameSessions tables)
+- **AI**: Amazon Bedrock (Claude 3.5 Sonnet)
+
+### Key Components
+- **api/index.ts**: Consolidated Lambda handlers (REST + WebSocket)
+- **api/bedrock.ts**: AI map generation using Bedrock
+- **api/types/**: All TypeScript type definitions (game, api, lambda)
+- **api/template.yaml**: SAM CloudFormation infrastructure definition
+- **api/samconfig.toml**: SAM deployment configuration
+
+### API Endpoints
+- `POST /maps/generate` - Generate AI map using Bedrock
+- `GET /maps/{mapId}` - Retrieve map data from DynamoDB
+- `POST /maps/{mapId}` - Save map data to DynamoDB
+- `GET /sessions/{sessionId}` - Get game session from DynamoDB
+- `PUT /sessions/{sessionId}` - Update game session in DynamoDB
+
+### WebSocket Events
+- `$connect` - WebSocket connection established
+- `$disconnect` - WebSocket connection closed
+- `$default` - Handle all WebSocket messages (joinGame, move, generateMap, saveGameState)
+
+### DynamoDB Tables
+- **Maps Table**: 
+  - Primary Key: `mapId` (string), Sort Key: `version` (string)
+  - Stores generated maps with versioning support
+- **GameSessions Table**:
+  - Primary Key: `sessionId` (string)
+  - TTL enabled for automatic session cleanup
+
 ## AI Integration
 
 ### World Generation System
-- **Location**: `prompts/world-generator.md`
-- **Purpose**: System prompt for AI agents to generate new maps, themes, and objects
-- **Output**: JSON format compatible with game's configuration system
+- **Cloud Integration**: Real-time AI generation via Bedrock API
+- **Frontend Access**: Press 'G' key to generate AI maps in-game
+- **System Prompt**: `docs/prompts/world-generator.md` embedded in Lambda functions
+- **Output**: JSON format directly integrated into game
 - **Capabilities**: Creates new themes, 80x40 map arrays, object definitions, exit connections
 
 ### Using AI Generation
-1. Copy content from `prompts/world-generator.md` to AI agent
-2. Request new content: "Create a crystal cave theme" or "Generate a steampunk city"
-3. Receive JSON output with themeConfig, mapConfig, mapArray, and newObjects
-4. Integrate output into game's THEME_CONFIGS and MAP_CONFIGS
+1. **In-Game**: Press 'G' key for instant AI map generation via backend API
+2. **REST API**: POST to `/maps/generate` with theme and description parameters
+3. **WebSocket**: Real-time updates during generation process
+4. **Automatic Integration**: Generated maps stored in DynamoDB and loaded in game
+5. **Versioning**: Maps support multiple versions for iterative generation
 
 ## Development Workflow
 
 ### Adding New Maps
-1. **Manual approach**: Update MAP_CONFIGS and THEME_CONFIGS in index.html
-2. **AI approach**: Use world-generator.md prompt to generate content
-3. **Testing**: Load index.html and navigate to new map areas
+1. **Frontend approach**: Update MAP_CONFIGS and THEME_CONFIGS in `web/index.html`
+2. **AI approach**: Use backend `/maps/generate` API with Bedrock integration
+3. **Database approach**: Store maps in DynamoDB via REST API
+4. **Testing**: Load `web/index.html` and navigate to new map areas
 
 ### Adding New Themes
 1. Define objects array in THEME_CONFIGS format
@@ -127,8 +216,9 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 
 ### Adding New Objects
 1. Choose unused alphabet letter (A-Z)
-2. Add to collision detection in isObstacle() function
-3. Update documentation with object meaning
+2. Add to collision detection in isObstacle() function in `web/index.html`
+3. Update backend Bedrock prompts if needed for AI generation
+4. Update documentation with object meaning
 
 ## Map Mode Implementation Notes
 
@@ -143,3 +233,48 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 - **Map transition detection**: Different tolerance levels for player movement vs camera movement
 - **Viewport consistency**: Map mode camera uses same viewport dimensions as game mode
 - **State management**: Separate tracking for map mode current map vs actual player map location
+
+## Deployment and Infrastructure
+
+### AWS Permissions Required
+- **AdministratorAccess**: Full administrative access for comprehensive deployment
+
+### Deployment Process
+1. **Setup IAM**: Create IAM user with AdministratorAccess policy
+2. **Configure AWS CLI**: Set credentials for deployment user
+3. **Environment Setup**: Configure `.env` file with deployment parameters
+4. **Deploy Backend**: Run `cd api && ./deploy.sh` (creates S3 bucket, Lambda functions, API Gateway)
+5. **Deploy Frontend**: Run `cd web && ./deploy.sh` (uploads to S3, auto-detects API endpoints)
+6. **Testing**: Verify deployed application functionality
+
+### Key Files for Deployment
+- **api/template.yaml**: SAM CloudFormation template
+- **api/samconfig.toml**: SAM deployment configuration
+- **api/deploy.sh**: Backend deployment script
+- **web/deploy.sh**: Frontend deployment script
+- **.env**: Shared environment variables for deployment
+
+### Deployment Strategy
+- **Independent Stacks**: Frontend and backend deploy separately but share configuration
+- **Backend First**: API deployment creates S3 bucket and provides endpoints
+- **Frontend Second**: Web deployment auto-detects backend endpoints from CloudFormation
+- **No Build Dependencies**: Frontend has no Node.js dependencies or build process
+- **Shared Environment**: Single `.env` file manages configuration for both deployments
+- **Documentation Separation**: `docs/` contains reference materials, not deployed content
+
+### Known Issues and Solutions
+- **Permission Errors**: If deployment fails with AWS permission errors, create dedicated IAM user with AdministratorAccess policy
+- **Stack Rollback**: If CloudFormation stack gets stuck in ROLLBACK_COMPLETE, delete stack and redeploy with new name
+- **Lambda Layer Issues**: Removed SharedLayer from template due to permission issues
+- **S3 Website Config**: Requires administrative permissions for static website hosting
+
+### Development History Notes
+- **Project Evolution**: Started as single-file game, evolved to full-stack with AWS SAM backend
+- **Architecture Decisions**: Consolidated multiple handler files into single `api/index.ts` for cleaner structure
+- **Type Safety**: Implemented TypeScript types organized in `api/types/` directory
+- **Structure Simplification**: Moved from shared types directory to backend-only types in `api/types/`
+- **Backend Independence**: Moved all Node.js/TypeScript files to `api/` directory for complete separation
+- **Environment Management**: Moved from hardcoded values to single `.env` configuration for deployment flexibility
+- **Documentation Organization**: Moved prompts to `docs/` following standard project structure conventions
+- **Deployment Strategy**: Separated frontend and backend deployment while maintaining shared configuration
+- **File Role Clarification**: System prompts embedded in code, not deployed to web (docs are for reference only)

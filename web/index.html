@@ -70,7 +70,7 @@
         <div id="gameMap"></div>
 
         <div id="controls" class="info-panel">
-            <strong>Controls:</strong> Use WASD to move, M for map mode
+            <strong>Controls:</strong> Use WASD to move, M for map mode, G to generate AI map
         </div>
 
         <div id="messages" class="info-panel">
@@ -81,6 +81,12 @@
     <script>
         class SimpleRPG {
             constructor() {
+                // Backend configuration
+                this.API_BASE_URL = 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev';
+                this.WS_URL = 'wss://your-websocket-id.execute-api.us-east-1.amazonaws.com/dev';
+                this.websocket = null;
+                this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                this.isConnected = false;
                 // Game constants
                 this.CONSTANTS = {
                     MAP_WIDTH: 80,
@@ -136,6 +142,9 @@
 
                 // Register event listeners
                 document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+
+                // Connect to backend
+                this.connectWebSocket();
 
                 // Initial area recording and rendering
                 this.recordVisitedArea();
@@ -226,6 +235,12 @@
                     return;
                 }
 
+                if (event.key === 'g' || event.key === 'G') {
+                    // Generate AI map - example: crystal cave
+                    this.generateMapWithAI('crystal cave', 'A mysterious underground cavern filled with glowing crystals');
+                    return;
+                }
+
                 if (this.isMapMode) {
                     this.handleMapModeInput(event);
                     return;
@@ -238,7 +253,7 @@
                 const newY = this.playerY + movement.dy;
 
                 if (this.canMoveTo(newX, newY)) {
-                    this.movePlayer(newX, newY);
+                    this.movePlayer(movement.dx, movement.dy);
                 } else {
                     this.updateMessage("Cannot move in that direction!");
                 }
@@ -259,14 +274,6 @@
             }
 
             // ===== PLAYER MOVEMENT =====
-            movePlayer(newX, newY) {
-                this.playerX = newX;
-                this.playerY = newY;
-                this.recordVisitedArea();
-                this.checkMapTransition();
-                this.updateMessage(`Player moved to (${this.playerX}, ${this.playerY}).`);
-                this.render();
-            }
 
             canMoveTo(x, y) {
                 if (!this.isWithinMapBounds(x, y)) return false;
@@ -543,6 +550,225 @@
             // ===== UI UPDATES =====
             updateMessage(message) {
                 document.getElementById('messages').innerHTML = `<strong>Message:</strong> ${message}`;
+            }
+
+            // ===== WEBSOCKET CONNECTION =====
+            connectWebSocket() {
+                try {
+                    this.websocket = new WebSocket(this.WS_URL);
+                    
+                    this.websocket.onopen = () => {
+                        console.log('Connected to WebSocket');
+                        this.isConnected = true;
+                        this.updateMessage('Connected to server');
+                        
+                        // Join game with session ID
+                        this.sendWebSocketMessage({
+                            action: 'joinGame',
+                            sessionId: this.sessionId,
+                            data: {}
+                        });
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.handleWebSocketMessage(data);
+                        } catch (error) {
+                            console.error('Failed to parse WebSocket message:', error);
+                        }
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('WebSocket connection closed');
+                        this.isConnected = false;
+                        this.updateMessage('Disconnected from server');
+                        
+                        // Try to reconnect after 5 seconds
+                        setTimeout(() => this.connectWebSocket(), 5000);
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateMessage('Connection error');
+                    };
+                } catch (error) {
+                    console.error('Failed to connect WebSocket:', error);
+                    this.updateMessage('Failed to connect to server');
+                }
+            }
+
+            sendWebSocketMessage(message) {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify(message));
+                } else {
+                    console.warn('WebSocket not connected, message not sent:', message);
+                }
+            }
+
+            handleWebSocketMessage(data) {
+                console.log('Received WebSocket message:', data);
+                
+                switch (data.action) {
+                    case 'joinGame':
+                        if (data.type === 'success' && data.data.session) {
+                            this.loadGameSession(data.data.session);
+                        }
+                        break;
+                        
+                    case 'generateMap':
+                        if (data.type === 'success') {
+                            this.handleGeneratedMap(data.data);
+                        } else if (data.type === 'error') {
+                            this.updateMessage(`Map generation failed: ${data.error}`);
+                        } else if (data.type === 'update') {
+                            this.updateMessage(data.data.message);
+                        }
+                        break;
+                        
+                    case 'move':
+                        if (data.type === 'success') {
+                            console.log('Move synchronized with server');
+                        }
+                        break;
+                        
+                    default:
+                        console.log('Unknown WebSocket message action:', data.action);
+                }
+            }
+
+            // ===== BACKEND INTEGRATION =====
+            async generateMapWithAI(theme, description = '') {
+                this.updateMessage('Requesting AI map generation...');
+                
+                if (this.isConnected) {
+                    // Use WebSocket for real-time updates
+                    this.sendWebSocketMessage({
+                        action: 'generateMap',
+                        sessionId: this.sessionId,
+                        data: { theme, description }
+                    });
+                } else {
+                    // Fallback to REST API
+                    try {
+                        const response = await fetch(`${this.API_BASE_URL}/maps/generate`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ theme, description })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.handleGeneratedMap(result);
+                        } else {
+                            this.updateMessage(`Map generation failed: ${result.error}`);
+                        }
+                    } catch (error) {
+                        console.error('Failed to generate map:', error);
+                        this.updateMessage('Failed to generate map');
+                    }
+                }
+            }
+
+            handleGeneratedMap(data) {
+                const { mapId, mapData } = data;
+                
+                // Add new map to game
+                const newMapIndex = Object.keys(this.MAP_CONFIGS).length;
+                
+                // Update configurations with generated data
+                const themeKey = Object.keys(mapData.themeConfig)[0];
+                const mapKey = Object.keys(mapData.mapConfig)[0];
+                
+                this.THEME_CONFIGS[themeKey] = mapData.themeConfig[themeKey];
+                this.MAP_CONFIGS[newMapIndex] = {
+                    theme: themeKey,
+                    exits: mapData.mapConfig[mapKey].exits
+                };
+                
+                // Create and store the map
+                this.maps[newMapIndex] = {
+                    map: mapData.mapArray,
+                    theme: themeKey,
+                    exits: mapData.mapConfig[mapKey].exits
+                };
+                
+                this.updateMessage(`New ${themeKey} map generated! Use number ${newMapIndex} to visit.`);
+                console.log('New map added:', { mapId, newMapIndex, theme: themeKey });
+            }
+
+            loadGameSession(session) {
+                console.log('Loading game session:', session);
+                
+                // Update game state from server
+                this.currentMapId = session.currentMap;
+                this.playerX = session.playerX;
+                this.playerY = session.playerY;
+                
+                // Load visited areas
+                if (session.visitedAreas) {
+                    this.visitedAreas = {};
+                    session.visitedAreas.forEach(area => {
+                        this.visitedAreas[area] = true;
+                    });
+                }
+                
+                this.updateMessage('Game session loaded from server');
+                this.render();
+            }
+
+            saveGameState() {
+                if (!this.isConnected) return;
+                
+                const gameState = {
+                    currentMap: this.currentMapId,
+                    playerX: this.playerX,
+                    playerY: this.playerY,
+                    visitedAreas: Object.keys(this.visitedAreas)
+                };
+                
+                this.sendWebSocketMessage({
+                    action: 'saveGameState',
+                    sessionId: this.sessionId,
+                    data: { sessionId: this.sessionId, gameState }
+                });
+            }
+
+            // Override movement to sync with server
+            movePlayer(dx, dy) {
+                const newX = this.playerX + dx;
+                const newY = this.playerY + dy;
+
+                if (this.isValidMove(newX, newY)) {
+                    this.playerX = newX;
+                    this.playerY = newY;
+                    this.recordVisitedArea();
+                    
+                    // Sync with server
+                    if (this.isConnected) {
+                        this.sendWebSocketMessage({
+                            action: 'move',
+                            sessionId: this.sessionId,
+                            data: {
+                                playerX: this.playerX,
+                                playerY: this.playerY,
+                                currentMap: this.currentMapId,
+                                visitedAreas: Object.keys(this.visitedAreas)
+                            }
+                        });
+                    }
+                    
+                    this.checkForMapTransition();
+                    this.render();
+                    
+                    // Auto-save every few moves
+                    if (Math.random() < 0.1) { // 10% chance
+                        this.saveGameState();
+                    }
+                }
             }
         }
 

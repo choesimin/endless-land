@@ -110,6 +110,13 @@ dist
 # Serverless directories
 .serverless/
 
+# AWS SAM
+.aws-sam/
+samconfig.toml
+*.js
+*.js.map
+*.d.ts
+
 # FuseBox cache
 .fusebox/
 
