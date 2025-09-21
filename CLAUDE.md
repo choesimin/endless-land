@@ -23,7 +23,6 @@ endless-land/
 │   ├── package-lock.json   # Dependency lock file
 │   ├── tsconfig.json       # TypeScript configuration
 │   ├── template.yaml       # SAM CloudFormation template
-│   ├── samconfig.toml      # SAM deployment configuration
 │   └── deploy.sh           # Deployment script
 ├── .env.example            # Environment variables template
 ├── .env                    # Environment configuration (gitignored)
@@ -72,11 +71,17 @@ endless-land/
 - **Manual deployment**: `cd api && sam build && sam deploy` then `cd web && ./deploy.sh`
 
 ### Environment Configuration
-- **Shared configuration**: Single `.env` file at project root
+- **Minimal configuration**: Only 3 essential variables in `.env` file
+- **Core variables**:
+  - `AWS_REGION=us-east-1` (AWS region)
+  - `BASE_NAME=endlessland` (project base name)
+  - `API_STAGE=dev` (deployment stage: dev/prod)
 - **Used by**: Both `api/deploy.sh` and `web/deploy.sh` scripts
-- **Key settings**: AWS region, project name, bucket names, API stage
+- **Resource naming**: All AWS resources auto-generated from these 3 variables
+  - S3 buckets: `${BASE_NAME}-web-${API_STAGE}`, `${BASE_NAME}-sam-${API_STAGE}`
+  - DynamoDB tables: `${BASE_NAME}-maps`, `${BASE_NAME}-sessions`
+  - CloudFormation stack: `${BASE_NAME}`
 - **Path handling**: Deploy scripts automatically reference `../.env`
-- **Optional**: Most settings have sensible defaults
 
 ## Language Usage Rules
 - **Conversations**: Use Korean only when discussing with the user
@@ -252,10 +257,9 @@ The main `SimpleRPG` class is organized into clearly marked sections:
 
 ### Key Files for Deployment
 - **api/template.yaml**: SAM CloudFormation template
-- **api/samconfig.toml**: SAM deployment configuration
-- **api/deploy.sh**: Backend deployment script
+- **api/deploy.sh**: Backend deployment script (manages all SAM parameters)
 - **web/deploy.sh**: Frontend deployment script
-- **.env**: Shared environment variables for deployment
+- **.env**: Minimal environment variables (AWS_REGION, BASE_NAME, API_STAGE only)
 
 ### Deployment Strategy
 - **Independent Stacks**: Frontend and backend deploy separately but share configuration

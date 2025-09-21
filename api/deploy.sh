@@ -38,15 +38,15 @@ else
 fi
 
 # Set default values if not provided
-PROJECT_NAME=${PROJECT_NAME:-endless-land}
-STACK_NAME=${STACK_NAME:-endless-land}
+BASE_NAME=${BASE_NAME:-endlessland}
+API_STAGE=${API_STAGE:-dev}
 AWS_REGION=${AWS_REGION:-us-east-1}
-FRONTEND_BUCKET_NAME=${FRONTEND_BUCKET_NAME:-endless-land-frontend}
-API_STAGE=${API_STAGE:-prod}
+FRONTEND_BUCKET_NAME=${FRONTEND_BUCKET_NAME:-$BASE_NAME-web-$API_STAGE}
+SAM_BUCKET_NAME=${SAM_BUCKET_NAME:-$BASE_NAME-sam-$API_STAGE}
 
 log_info "Starting Endless Land deployment"
-log_info "Project: $PROJECT_NAME"
-log_info "Stack: $STACK_NAME"
+log_info "Project: $BASE_NAME"
+log_info "Stack: $BASE_NAME"
 log_info "Region: $AWS_REGION"
 
 # Check prerequisites
@@ -109,10 +109,10 @@ log_success "SAM build complete"
 log_info "Deploying to AWS..."
 
 # Prepare SAM deploy parameters
-SAM_PARAMS="--parameter-overrides ProjectName=$PROJECT_NAME FrontendBucketName=$FRONTEND_BUCKET_NAME ApiStage=$API_STAGE"
+SAM_PARAMS="--parameter-overrides ProjectName=$BASE_NAME FrontendBucketName=$FRONTEND_BUCKET_NAME ApiStage=$API_STAGE --s3-bucket $SAM_BUCKET_NAME"
 
 # Check if first deployment
-if aws cloudformation describe-stacks --stack-name "$STACK_NAME" &> /dev/null; then
+if aws cloudformation describe-stacks --stack-name "$BASE_NAME" &> /dev/null; then
     log_info "Updating existing stack."
     sam deploy --no-confirm-changeset $SAM_PARAMS
 else
@@ -124,13 +124,13 @@ log_success "AWS deployment complete"
 
 # 5. Check deployment results
 log_info "Checking deployment results..."
-OUTPUTS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs' --output table)
+OUTPUTS=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs' --output table)
 echo "$OUTPUTS"
 
 # Extract important endpoints
-REST_API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`RestApiEndpoint`].OutputValue' --output text)
-WS_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' --output text)
-FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`FrontendURL`].OutputValue' --output text)
+REST_API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs[?OutputKey==`RestApiEndpoint`].OutputValue' --output text)
+WS_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' --output text)
+FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs[?OutputKey==`FrontendURL`].OutputValue' --output text)
 
 # 6. Frontend deployment guide
 log_info "Backend deployment complete!"
@@ -157,8 +157,8 @@ echo "   2. Enable Claude 3.5 Sonnet model access in Amazon Bedrock"
 echo "   3. Test game functionality"
 echo ""
 echo "Check logs:"
-echo "   sam logs -n ${PROJECT_NAME^}ApiFunction --stack-name $STACK_NAME"
-echo "   sam logs -n ${PROJECT_NAME^}WebSocketFunction --stack-name $STACK_NAME"
+echo "   sam logs -n ${BASE_NAME^}ApiFunction --stack-name $BASE_NAME"
+echo "   sam logs -n ${BASE_NAME^}WebSocketFunction --stack-name $BASE_NAME"
 echo ""
 echo "Delete stack (if needed):"
-echo "   aws cloudformation delete-stack --stack-name $STACK_NAME"
+echo "   aws cloudformation delete-stack --stack-name $BASE_NAME"

@@ -38,13 +38,13 @@ else
 fi
 
 # Set default values if not provided
-PROJECT_NAME=${PROJECT_NAME:-endless-land}
-STACK_NAME=${STACK_NAME:-endless-land}
+BASE_NAME=${BASE_NAME:-endlessland}
+API_STAGE=${API_STAGE:-dev}
 AWS_REGION=${AWS_REGION:-us-east-1}
-FRONTEND_BUCKET_NAME=${FRONTEND_BUCKET_NAME:-endless-land-frontend}
+FRONTEND_BUCKET_NAME=${FRONTEND_BUCKET_NAME:-$BASE_NAME-web-$API_STAGE}
 
 log_info "Starting Endless Land frontend deployment"
-log_info "Project: $PROJECT_NAME"
+log_info "Project: $BASE_NAME"
 log_info "Bucket: $FRONTEND_BUCKET_NAME"
 log_info "Region: $AWS_REGION"
 
@@ -79,17 +79,17 @@ log_success "S3 bucket found."
 # Get current API endpoints from CloudFormation stack
 log_info "Getting API endpoints from CloudFormation..."
 
-if aws cloudformation describe-stacks --stack-name "$STACK_NAME" &> /dev/null; then
-    REST_API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`RestApiEndpoint`].OutputValue' --output text)
-    WS_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' --output text)
-    FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`FrontendURL`].OutputValue' --output text)
+if aws cloudformation describe-stacks --stack-name "$BASE_NAME" &> /dev/null; then
+    REST_API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs[?OutputKey==`RestApiEndpoint`].OutputValue' --output text)
+    WS_ENDPOINT=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' --output text)
+    FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$BASE_NAME" --query 'Stacks[0].Outputs[?OutputKey==`FrontendURL`].OutputValue' --output text)
     
     log_info "Found API endpoints:"
     log_info "  REST API: $REST_API_ENDPOINT"
     log_info "  WebSocket: $WS_ENDPOINT"
     log_info "  Frontend URL: $FRONTEND_URL"
 else
-    log_warning "CloudFormation stack '$STACK_NAME' not found."
+    log_warning "CloudFormation stack '$BASE_NAME' not found."
     log_warning "API endpoints will need to be configured manually."
 fi
 
